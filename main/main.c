@@ -35,6 +35,7 @@ static const char *TAG = "Uniboard";
 #define CHANNEL_LIST_SIZE 3
 uint8_t channel_list[CHANNEL_LIST_SIZE] = {1, 6, 11};
 #endif /*CONFIG_EXAMPLE_USE_SCAN_CHANNEL_BITMAP*/
+wifi_ap_record_t ap_info[DEFAULT_SCAN_LIST_SIZE];
 
 
 
@@ -430,7 +431,7 @@ void expinit()
 }
 
 
-void LCD_setCursor(uint8_t col, uint8_t row)
+void LCD_setCursor(uint8_t row, uint8_t col)
 {
     if (row > LCD_rows - 1) {
         ESP_LOGE(tag, "Cannot write to row %d. Please select a row in the range (0, %d)", row, LCD_rows-1);
@@ -544,8 +545,8 @@ void array_2_channel_bitmap(const uint8_t channel_list[], const uint8_t channel_
     }
 }
 
-void wifi_scan_task()
-{
+void wifi_init_custom(){
+
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
     esp_netif_t *sta_netif = esp_netif_create_default_wifi_sta();
@@ -554,16 +555,24 @@ void wifi_scan_task()
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
 
-    uint16_t number = DEFAULT_SCAN_LIST_SIZE;
-    wifi_ap_record_t ap_info[DEFAULT_SCAN_LIST_SIZE];
-    uint16_t ap_count = 0;
+
+
+ 
     memset(ap_info, 0, sizeof(ap_info));
 
 
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_start());
 
+}
+
+void wifi_scan_task()
+{
+    uint16_t ap_count = 0;
+    uint16_t number = DEFAULT_SCAN_LIST_SIZE;
     while(1){
+    char text[100];
+
 
     esp_wifi_scan_start(NULL, true);
 
@@ -572,12 +581,19 @@ void wifi_scan_task()
     ESP_ERROR_CHECK(esp_wifi_scan_get_ap_records(&number, ap_info));
     ESP_LOGI(TAG, "Total APs scanned = %u, actual AP number ap_info holds = %u", ap_count, number);
     for (int i = 0; i < number; i++) {
+        LCD_setCursor(1, 0);
+        sprintf(text, "                ");
+        LCD_writeStr(text);
+        LCD_setCursor(1, 0);
+        sprintf(text, "%s", ap_info[i].ssid);
+        LCD_writeStr(text);
+        
         //ESP_LOGI(TAG, "SSID \t\t%s", ap_info[i].ssid);
         //ESP_LOGI(TAG, "RSSI \t\t%d", ap_info[i].rssi);
-
         //ESP_LOGI(TAG, "Channel \t\t%d", ap_info[i].primary);
+        vTaskDelay(pdMS_TO_TICKS(1000));
     }
-    vTaskDelay(pdMS_TO_TICKS(300));
+    
     }
 }
 
@@ -594,9 +610,12 @@ void LCD_DemoTask(void* param)
 {
     char num[20];
     while (true) {
-            LCD_setCursor(8, 1);
-            sprintf(num, "%f", ds18b20_read_temp());
-            LCD_clearScreen();
+            float temp = ds18b20_read_temp();
+            LCD_setCursor(0, 0);
+            sprintf(num, "                ");
+            LCD_writeStr(num);
+            sprintf(num, "%.4f", temp);
+            LCD_setCursor(0, 0);
             LCD_writeStr(num);
             vTaskDelay(pdMS_TO_TICKS(300));
         //}
@@ -666,16 +685,18 @@ void app_main(void)
         ret = nvs_flash_init();
     }
     ESP_ERROR_CHECK( ret );
+    
 
 
     //expWrite(0xff, 0x00);
     pwm_init();
     gpio_init();
+    wifi_init_custom();
 
     xTaskCreate(LCD_DemoTask, "Demo Task", 2048, NULL, 5, NULL);
     xTaskCreate(handleSwitches, "Switches Handler", 2048, NULL, 5, NULL);
     xTaskCreate(potGen_task, "pot gen", 2048, NULL, 5, NULL);
-    //xTaskCreate(wifi_scan_task, "wifi scanner", 2048, NULL, 5, NULL);
+    xTaskCreate(wifi_scan_task, "wifi scanner", 2048, NULL, 5, NULL);
 
 
 
