@@ -10,14 +10,17 @@
 #define I2C_MASTER_TIMEOUT_MS       1000
 
 #define INTERNAL_EXPANDER_ADDR 0x20
+#define portTICK_RATE_MS 1
 
 
-
+void gpio_init(void);
 esp_err_t I2C_init(void);
 
-
+void expinit();
 void expWrite(uint8_t buttons, uint8_t leds);
 
+void writeLeds(uint8_t leds);
+uint8_t getSwitches();
 
 #define pwm_PULSE_GPIO             15       // GPIO connects to the PWM signal line
 #define pwm_TIMEBASE_RESOLUTION_HZ 1000000  // 1MHz, 1us per tick

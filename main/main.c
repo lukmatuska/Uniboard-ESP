@@ -40,7 +40,6 @@ wifi_ap_record_t ap_info[DEFAULT_SCAN_LIST_SIZE];
 
 
 
-#define portTICK_RATE_MS 1
 
 
 
@@ -48,33 +47,6 @@ wifi_ap_record_t ap_info[DEFAULT_SCAN_LIST_SIZE];
 
 
 
-void writeLeds(uint8_t leds)
-{
-    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
-    ESP_ERROR_CHECK(i2c_master_start(cmd));
-    ESP_ERROR_CHECK(i2c_master_write_byte(cmd, (INTERNAL_EXPANDER_ADDR << 1) | I2C_MASTER_WRITE, 1));
-    ESP_ERROR_CHECK(i2c_master_write_byte(cmd, 0xff, 1));
-    ESP_ERROR_CHECK(i2c_master_write_byte(cmd, leds, 1));
-    ESP_ERROR_CHECK(i2c_master_stop(cmd));
-    ESP_ERROR_CHECK(i2c_master_cmd_begin(I2C_NUM_0, cmd, 1000/portTICK_PERIOD_MS));
-    i2c_cmd_link_delete(cmd);   
-
-    //LCD_pulseEnable(data);                                              // Clock data into LCD
-}
-
-
-
-uint8_t getSwitches(){
-    uint8_t switches;
-    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
-    ESP_ERROR_CHECK(i2c_master_start(cmd));
-    ESP_ERROR_CHECK(i2c_master_write_byte(cmd, (INTERNAL_EXPANDER_ADDR << 1) | I2C_MASTER_READ, 1));
-    ESP_ERROR_CHECK(i2c_master_read_byte(cmd, &switches, 1));
-    ESP_ERROR_CHECK(i2c_master_stop(cmd));
-    ESP_ERROR_CHECK(i2c_master_cmd_begin(I2C_NUM_0, cmd, 1000/portTICK_PERIOD_MS));
-    i2c_cmd_link_delete(cmd);   
-    return switches;
-}
 /*
 uint16_t readPot(uint8_t adcPin){
     adc_select_input(adcPin);
@@ -97,13 +69,6 @@ void handleSwitches(){
 }
 
 
-
-void expinit()
-{
-    vTaskDelay(100 / portTICK_RATE_MS);                                 // Initial 40 mSec delay
-    expWrite(0xff, 0xff);                // second part of reset sequence
-    ets_delay_us(200);                                                  // 100 uS delay (min)
-}
 
 
 
@@ -255,19 +220,6 @@ void potGen_task(){
     }
 }
 
-
-void gpio_init(void) {
-    gpio_config_t io_conf = {
-        .pin_bit_mask = 1ULL << DS18B20_PIN,
-        .mode = GPIO_MODE_OUTPUT,
-        .pull_up_en = GPIO_PULLUP_DISABLE,
-        .pull_down_en = GPIO_PULLDOWN_DISABLE,
-        .intr_type = GPIO_INTR_DISABLE
-    };
-    gpio_config(&io_conf);
-    io_conf.pin_bit_mask = 1ULL << 20;
-    gpio_config(&io_conf);
-}
 
 
 void app_main(void)
