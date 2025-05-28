@@ -5,11 +5,11 @@
   "idf.openOcdConfigs": [
     "board/esp32c6-builtin.cfg"
   ],
-  "idf.port": "/dev/ttyACM1",
+  "idf.port": "/dev/ttyACM0",
   "idf.toolsPath": "/home/lcrm/.espressif",
   "idf.customExtraVars": {
     "IDF_TARGET": "esp32c6"
   },
   "idf.flashType": "UART",
-  "idf.monitorPort": "/dev/ttyACM1"
+  "idf.monitorPort": "/dev/ttyACM0"
 }

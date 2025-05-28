@@ -541,7 +541,7 @@ static void array_2_channel_bitmap(const uint8_t channel_list[], const uint8_t c
     }
 }
 
-static void wifi_scan(void)
+static void wifi_scan_task(void)
 {
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
@@ -560,6 +560,8 @@ static void wifi_scan(void)
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_start());
 
+    while(1){
+
     esp_wifi_scan_start(NULL, true);
 
     ESP_LOGI(TAG, "Max AP number ap_info can hold = %u", number);
@@ -567,11 +569,14 @@ static void wifi_scan(void)
     ESP_ERROR_CHECK(esp_wifi_scan_get_ap_records(&number, ap_info));
     ESP_LOGI(TAG, "Total APs scanned = %u, actual AP number ap_info holds = %u", ap_count, number);
     for (int i = 0; i < number; i++) {
-        ESP_LOGI(TAG, "SSID \t\t%s", ap_info[i].ssid);
-        ESP_LOGI(TAG, "RSSI \t\t%d", ap_info[i].rssi);
+        //ESP_LOGI(TAG, "SSID \t\t%s", ap_info[i].ssid);
+        //ESP_LOGI(TAG, "RSSI \t\t%d", ap_info[i].rssi);
 
-        ESP_LOGI(TAG, "Channel \t\t%d", ap_info[i].primary);
+        //ESP_LOGI(TAG, "Channel \t\t%d", ap_info[i].primary);
     }
+    vTaskDelay(pdMS_TO_TICKS(300));
+    }
+
 }
 
 
@@ -653,14 +658,19 @@ float ds18b20_read_temp() {
 }
 
 
+int map(uint32_t x, uint32_t in_min, uint32_t in_max, uint32_t out_min, uint32_t out_max) {
+    return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+}
+
+
 
 void LCD_DemoTask(void* param)
 {
     char num[20];
     while (true) {
-        LCD_home();
+        //LCD_home();
         
-        LCD_clearScreen();/*
+        /*
         LCD_writeStr("16x2 I2C LCD");
         vTaskDelay(pdMS_TO_TICKS(3000));
         LCD_clearScreen();
@@ -668,13 +678,14 @@ void LCD_DemoTask(void* param)
         vTaskDelay(pdMS_TO_TICKS(3000));
         LCD_clearScreen();*/
         
-        for (int i = 0; i <= 16; i++) {
-            LCD_clearScreen();
-            LCD_setCursor(0, 0);
-            LCD_writeStr("16x2 I2C LCD");
-            LCD_writeStr("16x2 I2C LCD");
+        //for (int i = 0; i <= 16; i++) {
+            //LCD_clearScreen();
+            //LCD_setCursor(0, 0);
+            //LCD_writeStr("16x2 I2C LCD");
+            //LCD_writeStr("16x2 I2C LCD");
             LCD_setCursor(8, 1);
-            sprintf(num, "%d", i);
+            sprintf(num, "%f", ds18b20_read_temp());
+            LCD_clearScreen();
             LCD_writeStr(num);
             //pwmSet(19, i*10, 50);
             
@@ -682,36 +693,42 @@ void LCD_DemoTask(void* param)
             //expWrite(0x00, i);
             //mcpwm_timer_set_period(timer, i*100);
             vTaskDelay(pdMS_TO_TICKS(300));
-        }
+        //}
   
     }
 }
 
 void potGen_task(){
+    uint8_t state = 0;   //0=off, 1=on, this calls for state diagram
     int pot0_val;
     int freq = 0;
+    int duty = 50;
     uint8_t switches;
     char text[5]; 
-    pwmOn(19, 1000, 50);
 
     while(1){
         switches = getSwitches();
         if(switches & (1 << 4)){
             pot0_val = adcRead(ADC_CHANNEL_1);
-            freq = (freq * 99 + pot0_val) / 100;
+            duty = map(adcRead(ADC_CHANNEL_2), 0, 4096, 1, 50);
 
-            sprintf(text, "%d", pot0_val);
-            if(pot0_val > 20){
-            pwmSet(19, pot0_val, 50);
-        }
+            freq = map(pot0_val, 0, 4096, 20, 3000); //smoothing
+
+            if(state == 1){
+                pwmSet(19, freq, duty);  
+            }else {
+                pwmOn(19, freq, duty);   //turn it on only once
+                state = 1;               
+            }         
         vTaskDelay(pdMS_TO_TICKS(10));
         } else {
-            pwmOff(19);
-            vTaskDelay(pdMS_TO_TICKS(200));
-        }
-        
+            if(state){
+                pwmOff(19);
+                state = 0;
+            }
+            vTaskDelay(pdMS_TO_TICKS(200));  //no need to spam it when it's off, lower reaction time is ok
+        }      
     }
-
 }
 
 
@@ -738,16 +755,27 @@ void app_main(void)
     LCD_init(LCD_ADDR, SDA_PIN, SCL_PIN, LCD_COLS, LCD_ROWS);
     expinit();
 
+    esp_err_t ret = nvs_flash_init();
+    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        ret = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK( ret );
+
+
     //expWrite(0xff, 0x00);
     pwm_init();
+    gpio_init();
 
     xTaskCreate(LCD_DemoTask, "Demo Task", 2048, NULL, 5, NULL);
     xTaskCreate(handleSwitches, "Switches Handler", 2048, NULL, 5, NULL);
     xTaskCreate(potGen_task, "pot gen", 2048, NULL, 5, NULL);
 
-    vTaskDelay(50000);
-    printf("Restarting now.\n");
-    fflush(stdout);
-    esp_restart();
+    wifi_scan();
+
+    while(1){
+        vTaskDelay(10000);
+    }
+    //esp_restart();
 
 }
