@@ -20,10 +20,11 @@
 #include <string.h>
 #include "nvs_flash.h"
 
+#include "util.h"
+
 #include "lcd_1602_i2c.h"
 #include "onewire.h"
-#include "gpio_exp.h"
-#include "util.h"
+
 
 
 static const char *TAG = "Uniboard";
@@ -38,15 +39,6 @@ uint8_t channel_list[CHANNEL_LIST_SIZE] = {1, 6, 11};
 wifi_ap_record_t ap_info[DEFAULT_SCAN_LIST_SIZE];
 
 
-#define I2C_MASTER_SCL_IO           21       /*!< GPIO number used for I2C master clock */
-#define I2C_MASTER_SDA_IO           22       /*!< GPIO number used for I2C master data  */
-#define I2C_MASTER_NUM              I2C_NUM_0                   /*!< I2C port number for master dev */
-#define I2C_MASTER_FREQ_HZ          100000 /*!< I2C master clock frequency */
-#define I2C_MASTER_TX_BUF_DISABLE   0                           /*!< I2C master doesn't need buffer */
-#define I2C_MASTER_RX_BUF_DISABLE   0                           /*!< I2C master doesn't need buffer */
-#define I2C_MASTER_TIMEOUT_MS       1000
-
-#define INTERNAL_EXPANDER_ADDR 0x20
 
 #define portTICK_RATE_MS 1
 
@@ -227,36 +219,8 @@ void pwm_init(){
 
 
 
-esp_err_t I2C_init(void)
-{
-    i2c_config_t conf = {
-        .mode = I2C_MODE_MASTER,
-        .sda_io_num = I2C_MASTER_SDA_IO,
-        .scl_io_num = I2C_MASTER_SCL_IO,
-        .sda_pullup_en = GPIO_PULLUP_ENABLE,
-        .scl_pullup_en = GPIO_PULLUP_ENABLE,
-        .master.clk_speed = 100000
-    };
-	i2c_param_config(I2C_NUM_0, &conf);
-	i2c_driver_install(I2C_NUM_0, I2C_MODE_MASTER, 0, 0, 0);
-    return ESP_OK;
-}
 
 
-
-void expWrite(uint8_t buttons, uint8_t leds)
-{
-    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
-    ESP_ERROR_CHECK(i2c_master_start(cmd));
-    ESP_ERROR_CHECK(i2c_master_write_byte(cmd, (INTERNAL_EXPANDER_ADDR << 1) | I2C_MASTER_WRITE, 1));
-    ESP_ERROR_CHECK(i2c_master_write_byte(cmd, buttons, 1));
-    ESP_ERROR_CHECK(i2c_master_write_byte(cmd, leds, 1));
-    ESP_ERROR_CHECK(i2c_master_stop(cmd));
-    ESP_ERROR_CHECK(i2c_master_cmd_begin(I2C_NUM_0, cmd, 1000/portTICK_PERIOD_MS));
-    i2c_cmd_link_delete(cmd);   
-
-    //LCD_pulseEnable(data);                                              // Clock data into LCD
-}
 
 void writeLeds(uint8_t leds)
 {
