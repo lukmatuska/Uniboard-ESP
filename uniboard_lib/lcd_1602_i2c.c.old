@@ -11,15 +11,6 @@
 #include "lcd_1602_i2c.h"
 
 
-char tag[] = "LCD Driver";
-uint8_t LCD_addr;
-uint8_t SDA_pin;
-uint8_t SCL_pin;
-uint8_t LCD_cols;
-uint8_t LCD_rows;
-
-
-
 void LCD_init(uint8_t addr, uint8_t dataPin, uint8_t clockPin, uint8_t cols, uint8_t rows)
 {
     LCD_addr = addr;
@@ -59,6 +50,7 @@ void LCD_init(uint8_t addr, uint8_t dataPin, uint8_t clockPin, uint8_t cols, uin
 void LCD_setCursor(uint8_t col, uint8_t row)
 {
     if (row > LCD_rows - 1) {
+        ESP_LOGE(tag, "Cannot write to row %d. Please select a row in the range (0, %d)", row, LCD_rows-1);
         row = LCD_rows - 1;
     }
     uint8_t row_offsets[] = {LCD_LINEONE, LCD_LINETWO, LCD_LINETHREE, LCD_LINEFOUR};
