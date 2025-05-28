@@ -20,6 +20,11 @@
 #include <string.h>
 #include "nvs_flash.h"
 
+#include "lcd_1602_i2c.h"
+#include "onewire.h"
+#include "gpio_exp.h"
+#include "util.h"
+
 
 static const char *TAG = "Uniboard";
 
@@ -28,10 +33,9 @@ static const char *TAG = "Uniboard";
 #ifdef CONFIG_EXAMPLE_USE_SCAN_CHANNEL_BITMAP
 #define USE_CHANNEL_BITMAP 1
 #define CHANNEL_LIST_SIZE 3
-static uint8_t channel_list[CHANNEL_LIST_SIZE] = {1, 6, 11};
+uint8_t channel_list[CHANNEL_LIST_SIZE] = {1, 6, 11};
 #endif /*CONFIG_EXAMPLE_USE_SCAN_CHANNEL_BITMAP*/
 
-#define DS18B20_PIN 23
 
 
 #define I2C_MASTER_SCL_IO           21       /*!< GPIO number used for I2C master clock */
@@ -116,16 +120,16 @@ const int LCD_ENABLE_BIT = 0x04;
 #define LCD_SET_CURSOR          0x80        // set cursor position
 
 
-static char tag[] = "LCD Driver";
-static uint8_t LCD_addr;
-static uint8_t SDA_pin;
-static uint8_t SCL_pin;
-static uint8_t LCD_cols;
-static uint8_t LCD_rows;
+ char tag[] = "LCD Driver";
+ uint8_t LCD_addr;
+ uint8_t SDA_pin;
+ uint8_t SCL_pin;
+ uint8_t LCD_cols;
+ uint8_t LCD_rows;
 
-static void LCD_writeNibble(uint8_t nibble, uint8_t mode);
-static void LCD_writeByte(uint8_t data, uint8_t mode);
-static void LCD_pulseEnable(uint8_t nibble);
+ void LCD_writeNibble(uint8_t nibble, uint8_t mode);
+ void LCD_writeByte(uint8_t data, uint8_t mode);
+ void LCD_pulseEnable(uint8_t nibble);
 
 #define pwm_PULSE_GPIO             15       // GPIO connects to the PWM signal line
 #define pwm_TIMEBASE_RESOLUTION_HZ 1000000  // 1MHz, 1us per tick
@@ -143,7 +147,7 @@ typedef struct {
 } pwm_channel_t;
 
 #define MAX_PWM_CHANNELS 8
-static pwm_channel_t pwm_channels[MAX_PWM_CHANNELS] = {0};
+ pwm_channel_t pwm_channels[MAX_PWM_CHANNELS] = {0};
 
 void pwmOn(uint8_t pin, uint32_t freq, uint8_t duty_percent) {
     for (int i = 0; i < MAX_PWM_CHANNELS; i++) {
@@ -303,7 +307,7 @@ void pwm_init(){
 
 
 
-static esp_err_t I2C_init(void)
+esp_err_t I2C_init(void)
 {
     i2c_config_t conf = {
         .mode = I2C_MODE_MASTER,
@@ -354,7 +358,7 @@ void LCD_init(uint8_t addr, uint8_t dataPin, uint8_t clockPin, uint8_t cols, uin
     LCD_writeByte(LCD_DISPLAY_ON, LCD_COMMAND);                         // Ensure LCD is set to on
 }
 
-static void expWrite(uint8_t buttons, uint8_t leds)
+void expWrite(uint8_t buttons, uint8_t leds)
 {
     i2c_cmd_handle_t cmd = i2c_cmd_link_create();
     ESP_ERROR_CHECK(i2c_master_start(cmd));
@@ -368,7 +372,7 @@ static void expWrite(uint8_t buttons, uint8_t leds)
     //LCD_pulseEnable(data);                                              // Clock data into LCD
 }
 
-static void writeLeds(uint8_t leds)
+void writeLeds(uint8_t leds)
 {
     i2c_cmd_handle_t cmd = i2c_cmd_link_create();
     ESP_ERROR_CHECK(i2c_master_start(cmd));
@@ -460,7 +464,7 @@ void LCD_clearScreen(void)
     vTaskDelay(2 / portTICK_RATE_MS);                                   // This command takes a while to complete
 }
 
-static void LCD_writeNibble(uint8_t nibble, uint8_t mode)
+void LCD_writeNibble(uint8_t nibble, uint8_t mode)
 {
     uint8_t data = (nibble & 0xF0) | mode | LCD_BACKLIGHT;
     i2c_cmd_handle_t cmd = i2c_cmd_link_create();
@@ -477,13 +481,13 @@ static void LCD_writeNibble(uint8_t nibble, uint8_t mode)
 
 
 
-static void LCD_writeByte(uint8_t data, uint8_t mode)
+void LCD_writeByte(uint8_t data, uint8_t mode)
 {
     LCD_writeNibble(data & 0xF0, mode);
     LCD_writeNibble((data << 4) & 0xF0, mode);
 }
 
-static void LCD_pulseEnable(uint8_t data)
+void LCD_pulseEnable(uint8_t data)
 {
     i2c_cmd_handle_t cmd = i2c_cmd_link_create();
     ESP_ERROR_CHECK(i2c_master_start(cmd));
@@ -508,7 +512,7 @@ static void LCD_pulseEnable(uint8_t data)
 
 int adcRead(adc_channel_t channel) {
 
-    static adc_oneshot_unit_handle_t adc_handle;
+    adc_oneshot_unit_handle_t adc_handle;
 
 
     adc_oneshot_unit_init_cfg_t init_config = {
@@ -533,15 +537,14 @@ int adcRead(adc_channel_t channel) {
     return adc_raw;
 }
 
-static void array_2_channel_bitmap(const uint8_t channel_list[], const uint8_t channel_list_size, wifi_scan_config_t *scan_config) {
-
+void array_2_channel_bitmap(const uint8_t channel_list[], const uint8_t channel_list_size, wifi_scan_config_t *scan_config) {
     for(uint8_t i = 0; i < channel_list_size; i++) {
         uint8_t channel = channel_list[i];
         scan_config->channel_bitmap.ghz_2_channels |= (1 << channel);
     }
 }
 
-static void wifi_scan_task(void)
+void wifi_scan_task()
 {
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
@@ -576,86 +579,9 @@ static void wifi_scan_task(void)
     }
     vTaskDelay(pdMS_TO_TICKS(300));
     }
-
 }
 
 
-
-uint8_t ow_reset() {
-    uint8_t presence;
-
-    gpio_set_direction(DS18B20_PIN, GPIO_MODE_OUTPUT_OD);  // Set as output
-    gpio_set_level(DS18B20_PIN, 0);    // Pull line low
-    ets_delay_us(480);
-
-   gpio_set_level(DS18B20_PIN, 1);   // Release the line
-   ets_delay_us(70);
-   presence = gpio_get_level(DS18B20_PIN);  // Read presence
-
-    ets_delay_us(410);
-    return (presence == 0) ? 1 : 0; // 1 = presence detected
-}
-
-
-void ow_write_bit(uint8_t bit) {
-    gpio_set_direction(DS18B20_PIN, GPIO_MODE_OUTPUT_OD);
-    gpio_set_level(DS18B20_PIN, 0);
-    if (bit) {
-        ets_delay_us(6);
-        gpio_set_direction(DS18B20_PIN, GPIO_MODE_INPUT);
-        ets_delay_us(64);
-    } else {
-        ets_delay_us(64);
-        gpio_set_direction(DS18B20_PIN, GPIO_MODE_INPUT);
-        ets_delay_us(10);
-    }
-}
-
-uint8_t ow_read_bit() {
-    uint8_t bit = 0;
-    gpio_set_direction(DS18B20_PIN, GPIO_MODE_OUTPUT_OD);
-    gpio_set_level(DS18B20_PIN, 0);
-    ets_delay_us(6);
-    gpio_set_direction(DS18B20_PIN, GPIO_MODE_INPUT);
-    ets_delay_us(9);
-    bit = gpio_get_level(DS18B20_PIN);
-    ets_delay_us(55);
-    return bit;
-}
-
-void ow_write_byte(uint8_t byte) {
-    for (int i = 0; i < 8; i++) {
-        ow_write_bit(byte & 0x01);
-        byte >>= 1;
-    }
-}
-
-uint8_t ow_read_byte() {
-    uint8_t byte = 0;
-    for (int i = 0; i < 8; i++) {
-        byte >>= 1;
-        if (ow_read_bit()) byte |= 0x80;
-    }
-    return byte;
-}
-
-float ds18b20_read_temp() {
-    if (!ow_reset()) return -999; // Error
-    ow_write_byte(0xCC);  // Skip ROM
-    ow_write_byte(0x44);  // Convert T
-
-    vTaskDelay(pdMS_TO_TICKS(750));  // Wait for conversion
-
-    ow_reset();
-    ow_write_byte(0xCC);  // Skip ROM
-    ow_write_byte(0xBE);  // Read Scratchpad
-
-    uint8_t lsb = ow_read_byte();
-    uint8_t msb = ow_read_byte();
-
-    int16_t temp = (msb << 8) | lsb;
-    return temp / 16.0;
-}
 
 
 int map(uint32_t x, uint32_t in_min, uint32_t in_max, uint32_t out_min, uint32_t out_max) {
@@ -668,30 +594,10 @@ void LCD_DemoTask(void* param)
 {
     char num[20];
     while (true) {
-        //LCD_home();
-        
-        /*
-        LCD_writeStr("16x2 I2C LCD");
-        vTaskDelay(pdMS_TO_TICKS(3000));
-        LCD_clearScreen();
-        LCD_writeStr("Lets Count 0-10!");
-        vTaskDelay(pdMS_TO_TICKS(3000));
-        LCD_clearScreen();*/
-        
-        //for (int i = 0; i <= 16; i++) {
-            //LCD_clearScreen();
-            //LCD_setCursor(0, 0);
-            //LCD_writeStr("16x2 I2C LCD");
-            //LCD_writeStr("16x2 I2C LCD");
             LCD_setCursor(8, 1);
             sprintf(num, "%f", ds18b20_read_temp());
             LCD_clearScreen();
             LCD_writeStr(num);
-            //pwmSet(19, i*10, 50);
-            
-            //writeLeds(i);
-            //expWrite(0x00, i);
-            //mcpwm_timer_set_period(timer, i*100);
             vTaskDelay(pdMS_TO_TICKS(300));
         //}
   
@@ -704,7 +610,6 @@ void potGen_task(){
     int freq = 0;
     int duty = 50;
     uint8_t switches;
-    char text[5]; 
 
     while(1){
         switches = getSwitches();
@@ -770,8 +675,10 @@ void app_main(void)
     xTaskCreate(LCD_DemoTask, "Demo Task", 2048, NULL, 5, NULL);
     xTaskCreate(handleSwitches, "Switches Handler", 2048, NULL, 5, NULL);
     xTaskCreate(potGen_task, "pot gen", 2048, NULL, 5, NULL);
+    //xTaskCreate(wifi_scan_task, "wifi scanner", 2048, NULL, 5, NULL);
 
-    wifi_scan();
+
+
 
     while(1){
         vTaskDelay(10000);
